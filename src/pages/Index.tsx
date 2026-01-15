@@ -7,6 +7,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import Icon from "@/components/ui/icon";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
+import * as XLSX from 'xlsx';
+import { toast } from "@/hooks/use-toast";
 
 const operationsData = [
   { id: "005", name: "Токарная обработка", cost: 10 },
@@ -98,6 +100,85 @@ const Index = () => {
     return operationsData.find((op) => op.id === operationId)?.name || "";
   };
 
+  const exportToExcel = () => {
+    const workbook = XLSX.utils.book_new();
+
+    const ordersSheet: any[] = [];
+    orders.forEach((order) => {
+      ordersSheet.push({
+        'Номер заказ-наряда': order.id,
+        'Менеджер': order.manager,
+        'Дата принятия': order.dateReceived,
+        'Срок сдачи': order.deadline,
+      });
+      ordersSheet.push({});
+      ordersSheet.push({
+        'Дата запуска': 'Дата запуска',
+        'Номер детали': 'Номер детали',
+        'Наименование': 'Наименование',
+        'Количество': 'Количество',
+        'Операция': '№ операции',
+        'Название операции': 'Название операции',
+        'Норма времени, мин': 'Норма времени, мин',
+        'Исполнитель': 'Исполнитель',
+        'Стоимость, ₽': 'Стоимость, ₽',
+        'Дата сдачи': 'Дата сдачи',
+      });
+      order.details.forEach((detail) => {
+        ordersSheet.push({
+          'Дата запуска': detail.launchDate,
+          'Номер детали': detail.partNumber,
+          'Наименование': detail.partName,
+          'Количество': detail.quantity,
+          'Операция': detail.operationId,
+          'Название операции': getOperationName(detail.operationId),
+          'Норма времени, мин': detail.timeNorm,
+          'Исполнитель': detail.executor,
+          'Стоимость, ₽': calculateCost(detail.operationId, detail.timeNorm),
+          'Дата сдачи': detail.completionDate,
+        });
+      });
+      const totalTime = order.details.reduce((sum, d) => sum + d.timeNorm, 0);
+      const totalCost = order.details.reduce(
+        (sum, d) => sum + parseFloat(calculateCost(d.operationId, d.timeNorm)),
+        0
+      ).toFixed(2);
+      ordersSheet.push({});
+      ordersSheet.push({
+        'Дата запуска': 'ИТОГО:',
+        'Норма времени, мин': totalTime,
+        'Стоимость, ₽': totalCost,
+      });
+      ordersSheet.push({});
+    });
+
+    const ws1 = XLSX.utils.json_to_sheet(ordersSheet, { skipHeader: true });
+    XLSX.utils.book_append_sheet(workbook, ws1, 'Заказ-наряды');
+
+    const operationsSheet = operationsData.map((op) => ({
+      '№ операции': op.id,
+      'Наименование операции': op.name,
+      'Стоимость, ₽/мин': op.cost,
+    }));
+    const ws2 = XLSX.utils.json_to_sheet(operationsSheet);
+    XLSX.utils.book_append_sheet(workbook, ws2, 'Справочник операций');
+
+    const employeesSheet = employeesData.map((emp, idx) => ({
+      '№': idx + 1,
+      'ФИО сотрудника': emp,
+    }));
+    const ws3 = XLSX.utils.json_to_sheet(employeesSheet);
+    XLSX.utils.book_append_sheet(workbook, ws3, 'Справочник сотрудников');
+
+    const fileName = `Планирование_${new Date().toLocaleDateString('ru-RU').replace(/\./g, '-')}.xlsx`;
+    XLSX.writeFile(workbook, fileName);
+
+    toast({
+      title: "Экспорт завершён",
+      description: `Файл ${fileName} успешно сохранён`,
+    });
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b bg-sidebar text-sidebar-foreground">
@@ -110,10 +191,16 @@ const Index = () => {
                 <p className="text-sm text-sidebar-foreground/70">Подетальный учет заказ-нарядов</p>
               </div>
             </div>
-            <Button className="gap-2">
-              <Icon name="Plus" size={18} />
-              Новый заказ-наряд
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" className="gap-2" onClick={exportToExcel}>
+                <Icon name="Download" size={18} />
+                Экспорт в Excel
+              </Button>
+              <Button className="gap-2">
+                <Icon name="Plus" size={18} />
+                Новый заказ-наряд
+              </Button>
+            </div>
           </div>
         </div>
       </header>
